@@ -2,15 +2,17 @@ import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import type { ReactNode } from "react";
+import { LayoutDashboard, ListTodo, KanbanSquare, FolderKanban, Users, BarChart3, Settings as SettingsIcon } from "lucide-react";
+
 
 const nav = [
-  { to: "/dashboard", label: "Dashboard", icon: "▦" },
-  { to: "/tickets",   label: "Tickets",   icon: "◷" },
-  { to: "/kanban",    label: "Kanban",    icon: "▤" },
-  { to: "/projects",  label: "Projects",  icon: "◆" },
-  { to: "/team",      label: "Team",      icon: "◉" },
-  { to: "/reports",   label: "Reports",   icon: "◔" },
-  { to: "/settings",  label: "Settings",  icon: "⚙" },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/tickets", label: "Tickets", icon: ListTodo },
+  { to: "/kanban", label: "Kanban", icon: KanbanSquare },
+  { to: "/projects", label: "Projects", icon: FolderKanban },
+  { to: "/team", label: "Team", icon: Users },
+  { to: "/reports", label: "Reports", icon: BarChart3 },
+  { to: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -29,9 +31,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="px-2 py-2 flex-1">
           {nav.map((item) => {
             const active = pathname === item.to || pathname.startsWith(item.to + "/");
+            const Icon = item.icon;
+
             return (
               <Link
-                key={item.to} to={item.to}
+                key={item.to}
+                to={item.to}
                 className={
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors mb-0.5 " +
                   (active
@@ -39,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     : "text-muted-foreground hover:text-foreground hover:bg-muted")
                 }
               >
-                <span className="w-4 text-center opacity-70">{item.icon}</span>
+                <Icon className="h-4 w-4 opacity-70" />
                 {item.label}
               </Link>
             );
