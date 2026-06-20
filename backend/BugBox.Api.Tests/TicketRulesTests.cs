@@ -1,43 +1,137 @@
 using BugBox.Api.Models;
 using BugBox.Api.Services;
-using Xunit;
 
 namespace BugBox.Api.Tests;
 
 public class TicketRulesTests
 {
-    [Fact] public void Done_SetsResolvedAt()
+    [Fact]
+    public void Validate_WithValidTicket_ReturnsValidResult()
     {
-        var t = new Ticket { Status = TicketStatus.InProgress };
-        TicketRules.ApplyStatusSideEffects(t, TicketStatus.Done);
-        Assert.NotNull(t.ResolvedAt);
+        var ticket = CreateValidTicket();
+
+        var result = TicketRules.Validate(ticket, isNew: true);
+
+        Assert.True(result.Ok);
+        Assert.Null(result.Error);
     }
 
-    [Fact] public void DoneToInProgress_ClearsResolvedAt()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Validate_BugWithoutSteps_ReturnsExpectedError(string? steps)
     {
-        var t = new Ticket { Status = TicketStatus.Done, ResolvedAt = DateTime.UtcNow };
-        TicketRules.ApplyStatusSideEffects(t, TicketStatus.InProgress);
-        Assert.Null(t.ResolvedAt);
+        var ticket = CreateValidTicket();
+        ticket.Type = TicketType.Bug;
+        ticket.StepsToReproduce = steps;
+
+        var result = TicketRules.Validate(ticket, isNew: true);
+
+        Assert.False(result.Ok);
+        Assert.Equal("Bug tickets require steps to reproduce.", result.Error);
     }
 
-    [Fact] public void UrgentWithoutDueDate_IsInvalid()
+    [Fact]
+    public void Validate_UrgentTicketWithoutDueDate_ReturnsExpectedError()
     {
-        var t = new Ticket { Priority = TicketPriority.Urgent, Type = TicketType.Task, StepsToReproduce = "n/a" };
-        var v = TicketRules.Validate(t, true);
-        Assert.False(v.Ok);
+        var ticket = CreateValidTicket();
+        ticket.Priority = TicketPriority.Urgent;
+        ticket.DueDate = null;
+
+        var result = TicketRules.Validate(ticket, isNew: true);
+
+        Assert.False(result.Ok);
+        Assert.Equal("Urgent tickets require a due date.", result.Error);
     }
 
-    [Fact] public void BugWithoutSteps_IsInvalid()
+    [Theory]
+    [InlineData(-0.01, 1)]
+    [InlineData(1, -0.01)]
+    public void Validate_NegativeHours_ReturnsExpectedError(double estimated, double spent)
     {
-        var t = new Ticket { Type = TicketType.Bug, Priority = TicketPriority.Low };
-        var v = TicketRules.Validate(t, true);
-        Assert.False(v.Ok);
+        var ticket = CreateValidTicket();
+        ticket.EstimatedHours = (decimal)estimated;
+        ticket.SpentHours = (decimal)spent;
+
+        var result = TicketRules.Validate(ticket, isNew: true);
+
+        Assert.False(result.Ok);
+        Assert.Equal("Hours cannot be negative.", result.Error);
     }
 
-    [Fact] public void NegativeHours_Invalid()
+    [Fact]
+    public void Validate_NewUrgentTicketWithPastDueDate_ReturnsExpectedError()
     {
-        var t = new Ticket { Type = TicketType.Task, EstimatedHours = -1 };
-        var v = TicketRules.Validate(t, true);
-        Assert.False(v.Ok);
+        var ticket = CreateValidTicket();
+        ticket.Priority = TicketPriority.Urgent;
+        ticket.DueDate = DateTime.UtcNow.Date.AddDays(-1);
+
+        var result = TicketRules.Validate(ticket, isNew: true);
+
+        Assert.False(result.Ok);
+        Assert.Equal("Due date cannot be in the past for a new urgent ticket.", result.Error);
     }
+
+    [Fact]
+    public void Validate_ExistingUrgentTicketWithPastDueDate_RemainsValid()
+    {
+        var ticket = CreateValidTicket();
+        ticket.Priority = TicketPriority.Urgent;
+        ticket.DueDate = DateTime.UtcNow.Date.AddDays(-1);
+
+        var result = TicketRules.Validate(ticket, isNew: false);
+
+        Assert.True(result.Ok);
+    }
+
+    [Fact]
+    public void ApplyStatusSideEffects_MovingToDone_ResolvesAndUpdatesTicket()
+    {
+        var before = DateTime.UtcNow;
+        var ticket = CreateValidTicket();
+        ticket.Status = TicketStatus.InProgress;
+        ticket.UpdatedAt = before.AddDays(-1);
+
+        TicketRules.ApplyStatusSideEffects(ticket, TicketStatus.Done);
+
+        var after = DateTime.UtcNow;
+        Assert.Equal(TicketStatus.Done, ticket.Status);
+        Assert.InRange(ticket.ResolvedAt!.Value, before, after);
+        Assert.InRange(ticket.UpdatedAt, before, after);
+    }
+
+    [Fact]
+    public void ApplyStatusSideEffects_WhenAlreadyResolved_PreservesResolutionDate()
+    {
+        var resolvedAt = DateTime.UtcNow.AddDays(-2);
+        var ticket = CreateValidTicket();
+        ticket.Status = TicketStatus.Done;
+        ticket.ResolvedAt = resolvedAt;
+
+        TicketRules.ApplyStatusSideEffects(ticket, TicketStatus.Done);
+
+        Assert.Equal(resolvedAt, ticket.ResolvedAt);
+    }
+
+    [Fact]
+    public void ApplyStatusSideEffects_ReopeningDoneTicket_ClearsResolutionDate()
+    {
+        var ticket = CreateValidTicket();
+        ticket.Status = TicketStatus.Done;
+        ticket.ResolvedAt = DateTime.UtcNow.AddDays(-1);
+
+        TicketRules.ApplyStatusSideEffects(ticket, TicketStatus.InProgress);
+
+        Assert.Equal(TicketStatus.InProgress, ticket.Status);
+        Assert.Null(ticket.ResolvedAt);
+    }
+
+    private static Ticket CreateValidTicket() => new()
+    {
+        Type = TicketType.Task,
+        Priority = TicketPriority.Medium,
+        EstimatedHours = 1,
+        SpentHours = 0,
+    };
 }
