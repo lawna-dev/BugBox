@@ -30,6 +30,18 @@ Swagger UI is available at:
 http://localhost:5080/swagger
 ```
 
+## Run everything on Windows
+
+From the project root, launch both applications with:
+
+```powershell
+.\start.ps1
+```
+
+The script opens the backend and frontend in separate PowerShell windows. It also
+installs the frontend dependencies when `node_modules` is missing. Close both
+windows to stop the applications.
+
 On first run, the backend creates and seeds a local SQLite database:
 
 ```txt
